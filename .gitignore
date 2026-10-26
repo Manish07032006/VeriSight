@@ -1,0 +1,17 @@
+# Environments & Packages
+venv/
+node_modules/
+
+# Zip & Backup files
+*.zip
+*.tar.gz
+*.rar
+
+# Python cache & build files
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE & Editor settings
+.vscode/
+.idea/

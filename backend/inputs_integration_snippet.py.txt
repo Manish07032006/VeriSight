@@ -1,0 +1,27 @@
+# Add imports to your EXISTING inputs.py:
+from media_verification import build_media_evidence
+from c2pa_verifier import inspect_c2pa
+from local_visual_search import find_local_matches, make_manual_search_links
+
+# After process_media() and existing model predictions succeed:
+c2pa_result = inspect_c2pa(save_path)
+query_image = result["frames"][0] if result.get("frames") else None
+local_matches = find_local_matches(query_image)
+manual_search = make_manual_search_links(media_type)
+media_evidence = build_media_evidence(
+    media_type=media_type,
+    ai_image_verdict=ai_image_verdict,
+    ai_image_confidence=ai_image_confidence,
+    deepfake_verdict=deepfake_verdict,
+    deepfake_confidence=deepfake_confidence,
+    c2pa_result=c2pa_result,
+    local_matches=local_matches,
+)
+
+# Add these entries to the existing jsonify({...}) response:
+"c2pa": c2pa_result,
+"local_visual_matches": local_matches,
+"manual_visual_search": manual_search,
+"media_assessment": media_evidence,
+
+# Keep existing auth, database writes, and /scan/text unchanged.

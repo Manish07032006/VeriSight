@@ -1,0 +1,59 @@
+﻿DUAL-DATA-ALIGNMENT REPOSITORY STRUCTURE
+Root: D:\PROJECT\Dual-Data-Alignment
+Generated: 2026-10-23 11:28:01
+
+Dual-Data-Alignment/
+|-- assets/
+|   |-- BenchmarkComparison.png [2932.41 KB]
+|   |-- bias.png [2283.98 KB]
+|   |-- motivation.png [315.82 KB]
+|   +-- QRcode.jpg [188.33 KB]
+|-- Inference/
+|   |-- models/
+|   |   |-- dinov2_models.py [1.07 KB]
+|   |   |-- dinov2_models_lora.py [2.6 KB]
+|   |   +-- lora.py [3.37 KB]
+|   |-- inference.py [1.56 KB]
+|   +-- verisight_dda_service.py [8.83 KB]
+|-- Plot/
+|   |-- bfs_coco_benchmark_comparison_offset30.png [2265.05 KB]
+|   |-- plot.py [8.93 KB]
+|   +-- README.md [1.57 KB]
+|-- pretrained/
+|   +-- DDA_ckpt.pth [1226192.67 KB]
+|-- Reconstruction/
+|   |-- README.md [0.6 KB]
+|   +-- vae_rec.py [6.18 KB]
+|-- Training/
+|   |-- data/
+|   |   |-- .DS_Store [6 KB]
+|   |   |-- __init__.py [1.17 KB]
+|   |   |-- custom_transforms.py [14.38 KB]
+|   |   +-- datasets.py [11.56 KB]
+|   |-- models/
+|   |   |-- .DS_Store [6 KB]
+|   |   |-- __init__.py [2.35 KB]
+|   |   |-- dinov2_models.py [1.08 KB]
+|   |   |-- dinov2_models_lora.py [1.78 KB]
+|   |   +-- lora.py [3.2 KB]
+|   |-- networks/
+|   |   |-- .DS_Store [6 KB]
+|   |   |-- __init__.py [0 KB]
+|   |   |-- base_model.py [2.49 KB]
+|   |   +-- trainer.py [4.91 KB]
+|   |-- MSCOCO_train2017.json [3349.96 KB]
+|   |-- options.py [4.03 KB]
+|   |-- README.md [1.67 KB]
+|   |-- train.py [1.33 KB]
+|   +-- train.sh [1.82 KB]
+|-- LICENSE [11.29 KB]
+|-- README.md [11.92 KB]
++-- test_dda.py [2.75 KB]
+
+============================================================
+FILE STATISTICS
+============================================================
+Total files: 36
+Python files: 20
+Configuration files: 0
+Model/checkpoint files: 1
