@@ -3,19 +3,21 @@ Module 13 (optional): Reasoning & Internet Verification Layer.
 
 Given a text submission and the verdicts already produced by the trained
 fake-news and AI-text models, this module:
-  1. Optionally searches the web (Tavily) for current sources relevant
+1. Optionally searches the web (Tavily) for current sources relevant
      to the claim, if TAVILY_API_KEY is configured (FR-26).
-  2. Asks a local Ollama model to write a short natural-language
+2. Asks a local Ollama model to write a short natural-language
      explanation, grounded in those search results when available
-     (FR-24, FR-27 — never overrides the trained models' verdicts).
-  3. Degrades gracefully if Ollama or the search call fails, returning
+     (FR-24, FR-27 — supporting fact-checking verification).
+3. Degrades gracefully if Ollama or the search call fails, returning
      the normal verdicts with a note that explanation/verification
      was unavailable rather than breaking the request (FR-29).
 
 Scoped to the TEXT pipeline only (FR-28) — never called for media.
 """
 
+import json
 import os
+import re
 from dotenv import load_dotenv
 
 # app.py imports this module BEFORE it calls load_dotenv(), so load the
@@ -67,8 +69,6 @@ def _search_web(claim_text: str):
         return None
 
 
-import json
-
 def _build_prompt(
     text,
     fake_news_verdict,
@@ -80,16 +80,19 @@ def _build_prompt(
     prompt_parts = [
         "You are a strict, objective fact-checking engine.",
         "",
-        "Compare the submitted claim directly against the provided web search results.",
+        "Verify whether the EXACT submitted claim is supported or contradicted by the web search results.",
         "",
         "RULES:",
-        '1. Output ONLY a valid JSON object in this format: {"verdict": "fake" | "real", "explanation": "2-3 sentence explanation"}',
-        "2. If the search results only contain social media posts (Instagram, YouTube hobby videos) or lack credible journalism for an extraordinary claim, treat the claim as UNVERIFIED or FALSE and set \"verdict\": \"fake\".",
-        "3. If the claim is backed by credible, mainstream news or official sources, set \"verdict\": \"real\".",
-        "4. DO NOT blindly follow the baseline classifier—if the text makes an absurd or unverified claim, set \"verdict\": \"fake\".",
-        "5. Keep the explanation concise, objective, and under 3 sentences.",
+        '1. Output ONLY a valid JSON object in this format: {"verdict": "fake" | "real", "confidence": 50.0 to 99.0, "explanation": "2-3 sentence explanation"}',
+        '2. Check EVERY specific assertion in the claim (person, exact office/title, role, event, or fact). Do NOT mark a claim "real" just because the person, another official, or credible sources appear in the search results.',
+        '3. If the search results show a DIFFERENT role/title or facts that contradict the claim (for example, claiming someone holds an office when results show they hold a different office), set "verdict": "fake" and state the contradiction clearly in "explanation".',
+        '4. If search results only contain social media/unverified posts or lack credible evidence supporting the exact claim, set "verdict": "fake".',
+        '5. Set "verdict": "real" ONLY when the search results directly confirm the exact claim as stated.',
+        '6. Write "explanation" first so it clearly explains whether the exact claim is supported or contradicted, then make "verdict" match that conclusion. Keep "explanation" concise and under 3 sentences.',
         "",
-        f"Submitted claim: \"{text[:1000]}\"",
+        f'Submitted claim: "{text[:1000]}"',
+        f"Baseline fake-news classifier: {fake_news_verdict} ({fake_news_confidence})",
+        f"Baseline AI-text classifier: {ai_text_verdict} ({ai_text_confidence})",
     ]
 
     if search_results:
@@ -107,6 +110,20 @@ def _build_prompt(
     return "\n".join(prompt_parts)
 
 
+def _extract_json_payload(raw_content: str) -> dict:
+    cleaned = raw_content.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE).strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        raise
+
+
 def get_explanation(text, fake_news_verdict, fake_news_confidence,
                     ai_text_verdict, ai_text_confidence):
     """
@@ -116,49 +133,42 @@ def get_explanation(text, fake_news_verdict, fake_news_confidence,
         return None, 0, fake_news_verdict, fake_news_confidence
 
     search_results = _search_web(text)
+    sources_checked = len(search_results) if search_results else 0
 
     try:
         prompt = _build_prompt(
             text, fake_news_verdict, fake_news_confidence,
             ai_text_verdict, ai_text_confidence, search_results
         )
-        
+
         response = ollama.chat(
             model=OLLAMA_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            format="json"
+            format="json",
         )
-        
+
         raw_content = response["message"]["content"].strip()
-        
-        # Clean potential markdown formatting
-        if raw_content.startswith("```"):
-            raw_content = raw_content.split("```")[1]
-            if raw_content.startswith("json"):
-                raw_content = raw_content[4:]
-            raw_content = raw_content.strip()
+        data = _extract_json_payload(raw_content)
 
-        data = json.loads(raw_content)
-        
-        explanation = data.get("explanation", "")
+        explanation = str(data.get("explanation", "")).strip()
         rag_verdict = str(data.get("verdict", "")).strip().lower()
-        sources_checked = len(search_results) if search_results else 0
 
-        # Print debug log in Flask terminal to verify LLM output
+        try:
+            parsed_conf = float(data.get("confidence", 90.0))
+            if 0.0 <= parsed_conf <= 1.0:
+                parsed_conf *= 100.0
+            parsed_conf = round(max(0.0, min(100.0, parsed_conf)), 1)
+        except (TypeError, ValueError):
+            parsed_conf = 90.0
+
         print(f"[REASONING DEBUG] LLM Verdict: {rag_verdict} | Explanation: {explanation}")
 
-        # Set final verdict based on RAG verification
-        if rag_verdict in ("fake", "false"):
-            final_verdict = "fake"
-            final_confidence = 98.0
-        elif rag_verdict in ("real", "true"):
-            final_verdict = "real"
-            final_confidence = 98.0
+        if rag_verdict in ("fake", "false", "contradicted"):
+            return explanation, sources_checked, "fake", parsed_conf
+        elif rag_verdict in ("real", "true", "verified"):
+            return explanation, sources_checked, "real", parsed_conf
         else:
-            final_verdict = fake_news_verdict
-            final_confidence = fake_news_confidence
-
-        return explanation, sources_checked, final_verdict, final_confidence
+            return explanation, sources_checked, fake_news_verdict, fake_news_confidence
 
     except Exception as e:
         print(f"[reasoning] Fact check override failed: {e}")
